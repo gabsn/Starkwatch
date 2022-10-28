@@ -24,6 +24,7 @@
     "@aws-cdk/aws-events-targets": "^1.179.0",
     "@aws-cdk/aws-lambda": "^1.179.0",
     "aws-cdk-lib": "^2.41.0",
+    "axios": "^1.1.3",
     "constructs": "^10.0.0",
     "esbuild": "^0.15.12",
     "source-map-support": "^0.5.21"
