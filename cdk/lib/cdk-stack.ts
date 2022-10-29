@@ -12,21 +12,25 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 
 
 export class CdkStack extends cdk.Stack {
-  table: cdk.aws_dynamodb.Table;
   fetchLambda: cdk.aws_lambda_nodejs.NodejsFunction;
   sendLambda: cdk.aws_lambda_nodejs.NodejsFunction;
   receiveLambda: cdk.aws_lambda_nodejs.NodejsFunction;
   api: cdk.aws_apigateway.RestApi;
+  transactionStatusTable: cdk.aws_dynamodb.Table;
+  accountTable: cdk.aws_dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    this.setupTable();
+    this.setupTransactionTable();
+    this.setupAccountTable();
     this.setupFetcher();
     this.setupSender();
     this.setupReceiver();
-    this.table.grantFullAccess(this.fetchLambda);
     this.setupApiGateway();
+    this.transactionStatusTable.grantFullAccess(this.fetchLambda);
+    this.accountTable.grantFullAccess(this.receiveLambda);
+    this.accountTable.grantFullAccess(this.fetchLambda);
   }
 
   setupApiGateway() {
@@ -60,10 +64,21 @@ export class CdkStack extends cdk.Stack {
 
 
 
-  setupTable() {
-    this.table = new Table(this, "TransactionStatus", {
+  setupTransactionTable() {
+    this.transactionStatusTable = new Table(this, "TransactionStatus", {
       partitionKey: {
         name: "transactionHash",
+        type: AttributeType.STRING,
+      },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+  }
+
+  setupAccountTable() {
+    this.accountTable = new Table(this, "AccountsToWatch", {
+      partitionKey: {
+        name: "accountAddress",
         type: AttributeType.STRING,
       },
       billingMode: BillingMode.PAY_PER_REQUEST,
