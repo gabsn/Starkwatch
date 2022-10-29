@@ -10,15 +10,19 @@ import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 
 export class CdkStack extends cdk.Stack {
+  table: cdk.aws_dynamodb.Table;
+  fetchLambda: cdk.aws_lambda_nodejs.NodejsFunction;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     this.setupTable();
     this.setupFetcher();
+    this.table.grantFullAccess(this.fetchLambda);
   }
 
   setupTable() {
-    const table = new Table(this, "TransactionStatus", {
+    this.table = new Table(this, "TransactionStatus", {
       partitionKey: {
         name: "transactionHash",
         type: AttributeType.STRING,
@@ -29,7 +33,7 @@ export class CdkStack extends cdk.Stack {
   }
 
   setupFetcher() {
-    const newLambda = new NodejsFunction(this, "Fetcher", {
+    this.fetchLambda = new NodejsFunction(this, "Fetcher", {
       timeout: Duration.seconds(40),
       memorySize: 256,
       entry: path.resolve(__dirname, "../functions/fetcher.ts"),
@@ -43,6 +47,6 @@ export class CdkStack extends cdk.Stack {
     const eventRule = new events.Rule(this, "scheduleRule", {
       schedule: events.Schedule.rate(Duration.minutes(1)),
     });
-    eventRule.addTarget(new targets.LambdaFunction(newLambda));
+    eventRule.addTarget(new targets.LambdaFunction(this.fetchLambda));
   }
 }

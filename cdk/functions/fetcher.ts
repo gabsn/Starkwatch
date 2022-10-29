@@ -1,9 +1,17 @@
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+} from "@aws-sdk/client-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
+import {
+  EventBridgeClient,
+  PutEventsCommand,
+} from "@aws-sdk/client-eventbridge";
 import axios from "axios";
 
-const getBaseUrl = ({ to, env }: { to: string; env: string }) => {
-  return `https://${env}.voyager.online/api/txns?to=${to}`;
-};
+const ddb = new DynamoDBClient({});
+export const ebClient = new EventBridgeClient({});
 
 export const handler = async (event: any) => {
   const res = await axios.get(
@@ -14,50 +22,70 @@ export const handler = async (event: any) => {
   );
   const items = res.data["items"] as Array<Item>;
   for (const item of items) {
-    // if (item.status === "Accepted on L1") {
-    //   continue;
-    // }
+    if (item.status === "Accepted on L1") {
+      continue;
+    }
     const previousItem = await getPreviousItem(item.hash);
     if (previousItem === null || previousItem.status !== item.status) {
-      emitEventHasChanged();
-      setTransactionStatus(item);
+      await setTransactionStatus(item);
+      await emitEventHasChanged(item);
     }
   }
 };
 
 async function getPreviousItem(hash: string): Promise<Item | null> {
-  const ddb = new DynamoDBClient({});
   const params = {
     TableName: "CdkStack-TransactionStatus2B6158A7-17RI80QLXDL7O",
     Key: { transactionHash: { S: hash } },
   };
-  
+
   const res = await ddb.send(new GetItemCommand(params));
-  console.log(res);
+  if (res.Item == null) {
+    return null;
+  }
 
-  return null
-} 
+  return unmarshall(res.Item) as Item;
+}
 
-
-function emitEventHasChanged() {
-  return null
-} 
+async function emitEventHasChanged(item: Item) {
+  const params = {
+    Entries: [
+      {
+        Detail: JSON.stringify({
+          transactionHash: item.hash,
+          transactionStatus: item.status,
+        }),
+        DetailType: "appRequestSubmitted",
+        Resources: [
+          //   "RESOURCE_ARN", //RESOURCE_ARN
+        ],
+        Source: "starkwatch",
+      },
+    ],
+  };
+  const data = await ebClient.send(new PutEventsCommand(params));
+}
 
 async function setTransactionStatus(item: Item) {
   const ddb = new DynamoDBClient({});
   const params = {
     TableName: "CdkStack-TransactionStatus2B6158A7-17RI80QLXDL7O",
-    Item: { transactionHash: { S: item.hash }, transactionStatus: { S: item.status } },
+    Item: {
+      transactionHash: { S: item.hash },
+      transactionStatus: { S: item.status },
+    },
   };
-  
-  const res = await ddb.send(new PutItemCommand(params));
-  console.log(res);
 
-  return null
-} 
+  const res = await ddb.send(new PutItemCommand(params));
+
+  return null;
+}
 
 interface Item {
   hash: string;
   status: string;
-  
 }
+
+const getBaseUrl = ({ to, env }: { to: string; env: string }) => {
+  return `https://${env}.voyager.online/api/txns?to=${to}`;
+};
