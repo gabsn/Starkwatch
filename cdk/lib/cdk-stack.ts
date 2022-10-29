@@ -28,9 +28,11 @@ export class CdkStack extends cdk.Stack {
     this.setupScheduler();
     this.setupReceiver();
     this.setupApiGateway();
-    this.transactionStatusTable.grantFullAccess(this.fetchLambda);
+
     this.accountTable.grantFullAccess(this.receiveLambda);
-    this.accountTable.grantFullAccess(this.fetchLambda);
+    this.accountTable.grantFullAccess(this.schedulerLambda);
+
+    this.transactionStatusTable.grantFullAccess(this.fetchLambda);
   }
 
   setupApiGateway() {

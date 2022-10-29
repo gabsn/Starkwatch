@@ -1,16 +1,6 @@
-import {
-  DynamoDBClient,
-  command
-  GetItemCommand,
-  PutItemCommand,
-  ScanCommand,
-} from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import {
-  EventBridgeClient,
-  PutEventsCommand,
-} from "@aws-sdk/client-eventbridge";
-import axios from "axios";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 
 const ddb = new DynamoDBClient({});
 export const ebClient = new EventBridgeClient({});
@@ -29,7 +19,9 @@ async function getAccountsToWatch(): Promise<Array<string>> {
   if (res.Items == null) {
     return [];
   }
-  return res.Items.map(item => unmarshall(item) as Item).map(i => i.accountAddress);
+  return res.Items.map((item) => unmarshall(item) as Item).map(
+    (i) => i.accountAddress
+  );
 }
 
 async function emitWatchAccount(account: string) {
