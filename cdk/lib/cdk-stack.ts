@@ -12,12 +12,14 @@ import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 export class CdkStack extends cdk.Stack {
   table: cdk.aws_dynamodb.Table;
   fetchLambda: cdk.aws_lambda_nodejs.NodejsFunction;
+  sendLambda: cdk.aws_lambda_nodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     this.setupTable();
     this.setupFetcher();
+    this.setupSender();
     this.table.grantFullAccess(this.fetchLambda);
   }
 
@@ -49,4 +51,36 @@ export class CdkStack extends cdk.Stack {
     });
     eventRule.addTarget(new targets.LambdaFunction(this.fetchLambda));
   }
+
+  setupSender() {
+    this.sendLambda = new NodejsFunction(this, "Sender", {
+      timeout: Duration.seconds(40),
+      memorySize: 256,
+      entry: path.resolve(__dirname, "../functions/sender.ts"),
+      runtime: Runtime.NODEJS_16_X,
+      logRetention: RetentionDays.ONE_WEEK,
+      bundling: {
+        minify: true,
+        externalModules: ["aws-sdk"],
+      },
+      environment: {
+        BOT_API_KEY: getFromEnv("BOT_API_KEY"),
+      }
+    });
+    const eventRule = new events.Rule(this, "sendRule", {
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+    });
+    eventRule.addTarget(new targets.LambdaFunction(this.sendLambda));
+  }
+
+
 }
+
+
+export function getFromEnv(key: string) {
+  const value = process.env[key];
+  if (value === undefined) {
+    throw new Error("Telegram API key not defined in environment");
+  }
+  return value;
+  }
