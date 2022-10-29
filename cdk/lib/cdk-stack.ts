@@ -8,8 +8,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
 
 export class CdkStack extends cdk.Stack {
   fetchLambda: cdk.aws_lambda_nodejs.NodejsFunction;
@@ -18,6 +17,7 @@ export class CdkStack extends cdk.Stack {
   api: cdk.aws_apigateway.RestApi;
   transactionStatusTable: cdk.aws_dynamodb.Table;
   accountTable: cdk.aws_dynamodb.Table;
+  schedulerLambda: cdk.aws_lambda_nodejs.NodejsFunction;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -25,7 +25,7 @@ export class CdkStack extends cdk.Stack {
     this.setupTransactionTable();
     this.setupAccountTable();
     this.setupFetcher();
-    this.setupSender();
+    this.setupScheduler();
     this.setupReceiver();
     this.setupApiGateway();
     this.transactionStatusTable.grantFullAccess(this.fetchLambda);
@@ -34,35 +34,15 @@ export class CdkStack extends cdk.Stack {
   }
 
   setupApiGateway() {
-    this.api = new apigateway.RestApi(this, 'api', {
-      // description: 'example api gateway',
-      // deployOptions: {
-      //   stageName: 'dev',
-      // },
-      // // 👇 enable CORS
-      // defaultCorsPreflightOptions: {
-      //   allowHeaders: [
-      //     'Content-Type',
-      //     'X-Amz-Date',
-      //     'Authorization',
-      //     'X-Api-Key',
-      //   ],
-      //   allowMethods: ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      //   allowCredentials: true,
-      //   allowOrigins: ['http://localhost:3000'],
-      // },
-    });
-    new cdk.CfnOutput(this, 'apiUrl', {value: this.api.url});
+    this.api = new apigateway.RestApi(this, "api", {});
+    new cdk.CfnOutput(this, "apiUrl", { value: this.api.url });
 
-    const commands = this.api.root.addResource('commands')
+    const commands = this.api.root.addResource("commands");
     commands.addMethod(
-      'POST',
+      "POST",
       new apigateway.LambdaIntegration(this.receiveLambda)
-    )
-    
+    );
   }
-
-
 
   setupTransactionTable() {
     this.transactionStatusTable = new Table(this, "TransactionStatus", {
@@ -104,26 +84,22 @@ export class CdkStack extends cdk.Stack {
     eventRule.addTarget(new targets.LambdaFunction(this.fetchLambda));
   }
 
-  setupSender() {
-    this.sendLambda = new NodejsFunction(this, "Sender", {
+  setupScheduler() {
+    this.schedulerLambda = new NodejsFunction(this, "Scheduler", {
       timeout: Duration.seconds(40),
       memorySize: 256,
-      entry: path.resolve(__dirname, "../functions/sender.ts"),
+      entry: path.resolve(__dirname, "../functions/scheduler.ts"),
       runtime: Runtime.NODEJS_16_X,
       logRetention: RetentionDays.ONE_WEEK,
       bundling: {
         minify: true,
         externalModules: ["aws-sdk"],
       },
-      environment: {
-        BOT_API_KEY: getFromEnv("BOT_API_KEY"),
-        API_GATEWAY_URL: getFromEnv("API_GATEWAY_URL"),
-      }
     });
-    const eventRule = new events.Rule(this, "sendRule", {
+    const eventRule = new events.Rule(this, "schedulerRule", {
       schedule: events.Schedule.rate(Duration.minutes(1)),
     });
-    eventRule.addTarget(new targets.LambdaFunction(this.sendLambda));
+    eventRule.addTarget(new targets.LambdaFunction(this.schedulerLambda));
   }
 
   setupReceiver() {
@@ -140,14 +116,10 @@ export class CdkStack extends cdk.Stack {
       environment: {
         BOT_API_KEY: getFromEnv("BOT_API_KEY"),
         API_GATEWAY_URL: getFromEnv("API_GATEWAY_URL"),
-      }
+      },
     });
-
   }
-
-
 }
-
 
 export function getFromEnv(key: string) {
   const value = process.env[key];
@@ -155,4 +127,4 @@ export function getFromEnv(key: string) {
     throw new Error("Variable not defined in environment");
   }
   return value;
-  }
+}

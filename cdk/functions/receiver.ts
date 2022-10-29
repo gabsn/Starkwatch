@@ -14,19 +14,20 @@ export const handler = async (event: any) => {
   const chatId = body.message.chat.id;
   const text = body.message.text;
   const user = body.message.chat.username;
-  console.log(text);
 
-  const addressRegex = new RegExp(/^.*(0x[a-zA-Z0-9]{64}$)/g);
-  const match = addressRegex.exec(text);
+  if (text.startsWith("/watch")) {
+    const addressRegex = new RegExp(/^.*(0x[a-zA-Z0-9]{64}$)/g);
+    const match = addressRegex.exec(text);
 
-  if (match === null) {
-    await sendErrorMessagetoUser(chatId);
-  } else {
-    await sendConfirmationMessagetoUser(chatId, match[1]);
-    await addAddresstoDb(chatId, match[1], user);
+    if (match === null) {
+      await sendErrorMessagetoUser(chatId);
+    } else {
+      await sendConfirmationMessagetoUser(chatId, match[1]);
+      await addAddresstoDb(chatId, match[1], user);
 
-    const addressToWatch = match[1];
-    console.log(addressToWatch);
+      const addressToWatch = match[1];
+      console.log(addressToWatch);
+    }
   }
 
   return {
@@ -55,8 +56,11 @@ async function sendConfirmationMessagetoUser(chatId: number, match: string) {
   console.log(res);
 }
 
-async function addAddresstoDb(chatId: number, addressWatched: string, username: string) {
-
+async function addAddresstoDb(
+  chatId: number,
+  addressWatched: string,
+  username: string
+) {
   const params = {
     TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
     Item: {
