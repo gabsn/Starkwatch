@@ -9,6 +9,7 @@ import axios from "axios";
 import { PublishedEvent } from "typebridge";
 import { FetchAccountTxsEvent } from "../lib/events";
 import { getFromEnv } from "../lib/cdk-stack";
+import { print } from "util";
 
 const envs = ["mainnet", "goerli", "goerli-2"];
 const ddb = new DynamoDBClient({});
@@ -36,6 +37,9 @@ async function checkIfTxStatusChanged(env: string, event: Event) {
       continue;
     }
     const previousItem = await getPreviousItem(item.hash);
+    console.log(`Previous item: ${JSON.stringify(previousItem, null, 2)}`);
+    console.log(`Previous item status -${previousItem?.status}-`);
+    console.log(`Item status -${item?.status}-`);
     if (previousItem === null || previousItem.status !== item.status) {
       console.log(`Transaction status changed to ${item.status}`);
       await setTransactionStatus(item);
@@ -47,8 +51,11 @@ async function checkIfTxStatusChanged(env: string, event: Event) {
 async function getPreviousItem(hash: string): Promise<Item | null> {
   const params = {
     TableName: process.env.TX_STATUSES_TABLE,
-    Key: { transactionHash: { S: hash } },
+    Key: { hash: { S: hash } },
   };
+  console.log(
+    `Calling previous items with command: ${JSON.stringify(params, null, 2)}`
+  );
 
   const res = await ddb.send(new GetItemCommand(params));
   if (res.Item == null) {
@@ -63,8 +70,8 @@ async function setTransactionStatus(item: Item) {
   const params = {
     TableName: process.env.TX_STATUSES_TABLE,
     Item: {
-      transactionHash: { S: item.hash },
-      transactionStatus: { S: item.status },
+      hash: { S: item.hash },
+      status: { S: item.status },
     },
   };
 
