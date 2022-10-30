@@ -9,13 +9,18 @@ export const ebClient = new EventBridgeClient({});
 export const handler = async () => {
   const accountsToWatch = await getAccountsToWatch();
   await Promise.all(
-    accountsToWatch.map((i) => FetchAccountTxsEvent.publish(i))
+    accountsToWatch.map((i) =>
+      FetchAccountTxsEvent.publish({
+        accountAddress: i.accountAddress,
+        chatId: i.chatId,
+      })
+    )
   );
 };
 
 async function getAccountsToWatch(): Promise<Array<Item>> {
   const params = {
-    TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+    TableName: process.env.ACCOUNT_TABLE,
   };
   const res = await ddb.send(new ScanCommand(params));
   if (res.Items == null) {

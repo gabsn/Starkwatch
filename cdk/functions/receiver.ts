@@ -5,9 +5,7 @@ import {
   QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import { StartDataIngestionJobRequest } from "aws-sdk/clients/lookoutequipment";
 import axios from "axios";
-import { readdirSync } from "fs";
 import { getFromEnv } from "../lib/cdk-stack";
 
 const addressRegex = new RegExp(/^.*(0x[a-zA-Z0-9]{64}$)/g);
@@ -39,7 +37,7 @@ async function handleStop(username: string) {
   await Promise.all(
     items.map(async (i) => {
       const params = {
-        TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+        TableName: process.env.ACCOUNT_TABLE,
         Key: {
           accountAddress: {
             S: i.accountAddress,
@@ -53,7 +51,7 @@ async function handleStop(username: string) {
 
 async function getAccountsForUsername(username: string) {
   const params = {
-    TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+    TableName: process.env.ACCOUNT_TABLE,
     IndexName: "byUsername",
     KeyConditionExpression: "username = :username",
     ExpressionAttributeValues: {
@@ -117,7 +115,7 @@ async function addAddresstoDb(
   username: string
 ) {
   const params = {
-    TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+    TableName: process.env.ACCOUNT_TABLE,
     Item: {
       accountAddress: { S: addressWatched },
       chatId: { N: chatId.toString() },

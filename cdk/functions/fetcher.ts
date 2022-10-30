@@ -46,7 +46,7 @@ async function checkIfTxStatusChanged(env: string, event: Event) {
 
 async function getPreviousItem(hash: string): Promise<Item | null> {
   const params = {
-    TableName: "CdkStack-TransactionStatus2B6158A7-17RI80QLXDL7O",
+    TableName: process.env.TX_STATUSES_TABLE,
     Key: { transactionHash: { S: hash } },
   };
 
@@ -61,7 +61,7 @@ async function getPreviousItem(hash: string): Promise<Item | null> {
 async function setTransactionStatus(item: Item) {
   const ddb = new DynamoDBClient({});
   const params = {
-    TableName: "CdkStack-TransactionStatus2B6158A7-17RI80QLXDL7O",
+    TableName: process.env.TX_STATUSES_TABLE,
     Item: {
       transactionHash: { S: item.hash },
       transactionStatus: { S: item.status },

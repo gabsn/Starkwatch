@@ -24,6 +24,7 @@ export class CdkStack extends cdk.Stack {
 
     this.setupTransactionTable();
     this.setupAccountTable();
+
     this.setupFetcher();
     this.setupScheduler();
     this.setupReceiver();
@@ -98,6 +99,8 @@ export class CdkStack extends cdk.Stack {
       },
       environment: {
         BOT_API_KEY: getFromEnv("BOT_API_KEY"),
+        ACCOUNT_TABLE: this.accountTable.tableName,
+        TX_STATUSES_TABLE: this.transactionStatusTable.tableName,
       },
     });
   }
@@ -112,6 +115,11 @@ export class CdkStack extends cdk.Stack {
       bundling: {
         minify: true,
         externalModules: ["aws-sdk"],
+      },
+      environment: {
+        BOT_API_KEY: getFromEnv("BOT_API_KEY"),
+        ACCOUNT_TABLE: this.accountTable.tableName,
+        TX_STATUSES_TABLE: this.transactionStatusTable.tableName,
       },
     });
     const eventRule = new events.Rule(this, "schedulerRule", {
@@ -133,7 +141,8 @@ export class CdkStack extends cdk.Stack {
       },
       environment: {
         BOT_API_KEY: getFromEnv("BOT_API_KEY"),
-        API_GATEWAY_URL: getFromEnv("API_GATEWAY_URL"),
+        ACCOUNT_TABLE: this.accountTable.tableName,
+        TX_STATUSES_TABLE: this.transactionStatusTable.tableName,
       },
     });
   }
