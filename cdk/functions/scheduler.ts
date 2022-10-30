@@ -1,51 +1,28 @@
 import { DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { FetchAccountTxsEvent } from "../lib/events";
 
 const ddb = new DynamoDBClient({});
 export const ebClient = new EventBridgeClient({});
 
 export const handler = async () => {
   const accountsToWatch = await getAccountsToWatch();
-  await Promise.all(accountsToWatch.map(emitWatchAccount));
+  await Promise.all(
+    accountsToWatch.map((i) => FetchAccountTxsEvent.publish(i))
+  );
 };
 
-async function getAccountsToWatch(): Promise<Array<string>> {
+async function getAccountsToWatch(): Promise<Array<Item>> {
   const params = {
     TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
   };
-
   const res = await ddb.send(new ScanCommand(params));
   if (res.Items == null) {
     return [];
   }
-  return res.Items.map((item) => unmarshall(item) as Item).map(
-    (i) => i.accountAddress
-  );
+  return res.Items.map((item) => unmarshall(item) as Item);
 }
-
-async function emitWatchAccount(account: string) {
-  console.log(account);
-}
-
-// async function emitEventHasChanged() {
-//   const params = {
-//     Entries: [
-//       {
-//         Detail: JSON.stringify({
-//           transactionHash: item.hash,
-//           transactionStatus: item.status,
-//         }),
-//         DetailType: "appRequestSubmitted",
-//         Resources: [
-//           //   "RESOURCE_ARN", //RESOURCE_ARN
-//         ],
-//         Source: "starkwatch",
-//       },
-//     ],
-//   };
-//   const data = await ebClient.send(new PutEventsCommand(params));
-// }
 
 interface Item {
   accountAddress: string;

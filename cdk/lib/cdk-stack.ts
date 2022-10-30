@@ -33,6 +33,16 @@ export class CdkStack extends cdk.Stack {
     this.accountTable.grantFullAccess(this.schedulerLambda);
 
     this.transactionStatusTable.grantFullAccess(this.fetchLambda);
+
+    const bus = new events.EventBus(this, "bus", {
+      eventBusName: "FetchAccountTxsBus",
+    });
+    bus.grantPutEventsTo(this.schedulerLambda);
+    const eventRule = new events.Rule(this, "fetchAccountTxsRule", {
+      eventBus: bus,
+      eventPattern: { source: ["focustree.scheduler"] },
+    });
+    eventRule.addTarget(new targets.LambdaFunction(this.fetchLambda));
   }
 
   setupApiGateway() {
@@ -66,6 +76,13 @@ export class CdkStack extends cdk.Stack {
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    this.accountTable.addGlobalSecondaryIndex({
+      indexName: "byUsername",
+      partitionKey: {
+        name: "username",
+        type: AttributeType.STRING,
+      },
+    });
   }
 
   setupFetcher() {
@@ -79,11 +96,10 @@ export class CdkStack extends cdk.Stack {
         minify: true,
         externalModules: ["aws-sdk"],
       },
+      environment: {
+        BOT_API_KEY: getFromEnv("BOT_API_KEY"),
+      },
     });
-    const eventRule = new events.Rule(this, "scheduleRule", {
-      schedule: events.Schedule.rate(Duration.minutes(1)),
-    });
-    eventRule.addTarget(new targets.LambdaFunction(this.fetchLambda));
   }
 
   setupScheduler() {

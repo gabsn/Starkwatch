@@ -1,32 +1,28 @@
 import {
+  DeleteItemCommand,
   DynamoDBClient,
-  GetItemCommand,
   PutItemCommand,
+  QueryCommand,
 } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
+import { StartDataIngestionJobRequest } from "aws-sdk/clients/lookoutequipment";
 import axios from "axios";
+import { readdirSync } from "fs";
 import { getFromEnv } from "../lib/cdk-stack";
 
+const addressRegex = new RegExp(/^.*(0x[a-zA-Z0-9]{64}$)/g);
 const ddb = new DynamoDBClient({});
 
 export const handler = async (event: any) => {
   const body = JSON.parse(event.body) as Body;
-  const chatId = body.message.chat.id;
-  const text = body.message.text;
-  const user = body.message.chat.username;
+  console.log(body);
 
-  if (text.startsWith("/watch")) {
-    const addressRegex = new RegExp(/^.*(0x[a-zA-Z0-9]{64}$)/g);
-    const match = addressRegex.exec(text);
-
-    if (match === null) {
-      await sendErrorMessagetoUser(chatId);
-    } else {
-      await sendConfirmationMessagetoUser(chatId, match[1]);
-      await addAddresstoDb(chatId, match[1], user);
-
-      const addressToWatch = match[1];
-      console.log(addressToWatch);
+  if (body.message != undefined) {
+    if (body.message.text.startsWith("/watch")) {
+      await handleWatch(body.message);
+    }
+    if (body.message.text.startsWith("/stop")) {
+      await handleStop(body.message.chat.username);
     }
   }
 
@@ -37,6 +33,65 @@ export const handler = async (event: any) => {
     body: "OK",
   };
 };
+
+async function handleStop(username: string) {
+  const items = await getAccountsForUsername(username);
+  await Promise.all(
+    items.map(async (i) => {
+      const params = {
+        TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+        Key: {
+          accountAddress: {
+            S: i.accountAddress,
+          },
+        },
+      };
+      const res = await ddb.send(new DeleteItemCommand(params));
+    })
+  );
+}
+
+async function getAccountsForUsername(username: string) {
+  const params = {
+    TableName: "CdkStack-AccountsToWatch0A702DCE-Z6XSJDP9YT94",
+    IndexName: "byUsername",
+    KeyConditionExpression: "username = :username",
+    ExpressionAttributeValues: {
+      ":username": {
+        S: username,
+      },
+    },
+  };
+
+  const res = await ddb.send(new QueryCommand(params));
+  return (res.Items ?? []).map(
+    (i) =>
+      unmarshall(i) as {
+        accountAddress: string;
+        username: string;
+        chatId: number;
+      }
+  );
+}
+
+async function handleWatch(message: Message) {
+  const {
+    chat: { id: chatId, username },
+    text,
+  } = message;
+
+  const match = addressRegex.exec(text);
+
+  if (match === null) {
+    await sendErrorMessagetoUser(chatId);
+  } else {
+    await sendConfirmationMessagetoUser(chatId, match[1]);
+    await addAddresstoDb(chatId, match[1], username);
+
+    const addressToWatch = match[1];
+    console.log(addressToWatch);
+  }
+}
 
 async function sendErrorMessagetoUser(chatId: number) {
   const errorMessage =
@@ -76,11 +131,13 @@ async function addAddresstoDb(
 }
 
 interface Body {
-  message: {
-    chat: {
-      id: number;
-      username: string;
-    };
-    text: string;
+  message?: Message;
+}
+
+interface Message {
+  chat: {
+    id: number;
+    username: string;
   };
+  text: string;
 }

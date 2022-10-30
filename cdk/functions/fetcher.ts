@@ -4,20 +4,30 @@ import {
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import {
-  EventBridgeClient,
-  PutEventsCommand,
-} from "@aws-sdk/client-eventbridge";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import axios from "axios";
+import { PublishedEvent } from "typebridge";
+import { FetchAccountTxsEvent } from "../lib/events";
+import { getFromEnv } from "../lib/cdk-stack";
 
+const envs = ["mainnet", "goerli", "goerli-2"];
 const ddb = new DynamoDBClient({});
 export const ebClient = new EventBridgeClient({});
 
-export const handler = async (event: any) => {
+type Event = PublishedEvent<typeof FetchAccountTxsEvent>;
+
+export async function handler(event: Event) {
+  console.log(
+    `Check if tx status changed for account: ${event.detail.accountAddress}`
+  );
+  await Promise.all(envs.map((env) => checkIfTxStatusChanged(env, event)));
+}
+
+async function checkIfTxStatusChanged(env: string, event: Event) {
   const res = await axios.get(
     getBaseUrl({
-      env: "goerli",
-      to: "0x367c0c4603a29bc5aca8e07c6a2776d7c0d325945abb4f772f448b345ca4cf7",
+      env,
+      to: event.detail.accountAddress,
     })
   );
   const items = res.data["items"] as Array<Item>;
@@ -27,11 +37,12 @@ export const handler = async (event: any) => {
     }
     const previousItem = await getPreviousItem(item.hash);
     if (previousItem === null || previousItem.status !== item.status) {
+      console.log(`Transaction status changed to ${item.status}`);
       await setTransactionStatus(item);
-      await emitEventHasChanged(item);
+      await sendNotification(env, item, event.detail.chatId);
     }
   }
-};
+}
 
 async function getPreviousItem(hash: string): Promise<Item | null> {
   const params = {
@@ -45,25 +56,6 @@ async function getPreviousItem(hash: string): Promise<Item | null> {
   }
 
   return unmarshall(res.Item) as Item;
-}
-
-async function emitEventHasChanged(item: Item) {
-  const params = {
-    Entries: [
-      {
-        Detail: JSON.stringify({
-          transactionHash: item.hash,
-          transactionStatus: item.status,
-        }),
-        DetailType: "appRequestSubmitted",
-        Resources: [
-          //   "RESOURCE_ARN", //RESOURCE_ARN
-        ],
-        Source: "starkwatch",
-      },
-    ],
-  };
-  const data = await ebClient.send(new PutEventsCommand(params));
 }
 
 async function setTransactionStatus(item: Item) {
@@ -87,5 +79,30 @@ interface Item {
 }
 
 const getBaseUrl = ({ to, env }: { to: string; env: string }) => {
+  if (env == "mainnet") {
+    return `https://voyager.online/api/txns?to=${to}`;
+  }
   return `https://${env}.voyager.online/api/txns?to=${to}`;
+};
+
+async function sendNotification(env: string, item: Item, chatId: string) {
+  const confirmationMessage = `✨ Congrats! Your transaction ${formatTx(
+    env,
+    item.hash
+  )} went through with status *${item.status}* 🚀`;
+  const BOT_API_KEY = getFromEnv("BOT_API_KEY");
+  const baseUrl = `https://api.telegram.org/bot${BOT_API_KEY}/sendMessage?chat_id=${chatId}&text=${confirmationMessage}&parse_mode=markdown`;
+  await axios.post(baseUrl);
+}
+
+const formatTx = (env: string, txHash: string) => {
+  if (env == "mainnet") {
+    return `[${txHash}](https://starkscan.co/tx/${txHash})`;
+  } else if (env == "goerli") {
+    return `[${txHash}](https://testnet.starkscan.co/tx/${txHash})`;
+  } else if (env == "goerli-2") {
+    return `[${txHash}](https://testnet-2.starkscan.co/tx/${txHash})`;
+  } else {
+    throw Error(`${env} is wrong env`);
+  }
 };
