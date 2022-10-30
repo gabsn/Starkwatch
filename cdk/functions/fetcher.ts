@@ -31,16 +31,19 @@ async function checkIfTxStatusChanged(env: string, event: Event) {
       to: event.detail.accountAddress,
     })
   );
-  const items = res.data["items"] as Array<Item>;
+  const items = res.data["items"] as Array<VoyagerItem>;
   for (const item of items) {
     if (item.status === "Accepted on L1") {
       continue;
     }
     const previousItem = await getPreviousItem(item.hash);
     console.log(`Previous item: ${JSON.stringify(previousItem, null, 2)}`);
-    console.log(`Previous item status -${previousItem?.status}-`);
+    console.log(`Previous item status -${previousItem?.transactionStatus}-`);
     console.log(`Item status -${item?.status}-`);
-    if (previousItem === null || previousItem.status !== item.status) {
+    if (
+      previousItem === null ||
+      previousItem.transactionStatus !== item.status
+    ) {
       console.log(`Transaction status changed to ${item.status}`);
       await setTransactionStatus(item);
       await sendNotification(env, item, event.detail.chatId);
@@ -48,10 +51,15 @@ async function checkIfTxStatusChanged(env: string, event: Event) {
   }
 }
 
-async function getPreviousItem(hash: string): Promise<Item | null> {
+interface VoyagerItem {
+  hash: string;
+  status: string;
+}
+
+async function getPreviousItem(transactionHash: string): Promise<Item | null> {
   const params = {
     TableName: process.env.TX_STATUSES_TABLE,
-    Key: { hash: { S: hash } },
+    Key: { transactionHash: { S: transactionHash } },
   };
   console.log(
     `Calling previous items with command: ${JSON.stringify(params, null, 2)}`
@@ -65,13 +73,13 @@ async function getPreviousItem(hash: string): Promise<Item | null> {
   return unmarshall(res.Item) as Item;
 }
 
-async function setTransactionStatus(item: Item) {
+async function setTransactionStatus(item: VoyagerItem) {
   const ddb = new DynamoDBClient({});
   const params = {
     TableName: process.env.TX_STATUSES_TABLE,
     Item: {
-      hash: { S: item.hash },
-      status: { S: item.status },
+      transactionHash: { S: item.hash },
+      transactionStatus: { S: item.status },
     },
   };
 
@@ -81,8 +89,8 @@ async function setTransactionStatus(item: Item) {
 }
 
 interface Item {
-  hash: string;
-  status: string;
+  transactionHash: string;
+  transactionStatus: string;
 }
 
 const getBaseUrl = ({ to, env }: { to: string; env: string }) => {
@@ -92,11 +100,15 @@ const getBaseUrl = ({ to, env }: { to: string; env: string }) => {
   return `https://${env}.voyager.online/api/txns?to=${to}`;
 };
 
-async function sendNotification(env: string, item: Item, chatId: string) {
+async function sendNotification(
+  env: string,
+  item: VoyagerItem,
+  chatId: string
+) {
   const confirmationMessage = `✨ Congrats! Your transaction ${formatTx(
     env,
     item.hash
-  )} went through with status *${item.status}* 🚀`;
+  )} went through with transactionStatus *${item.status}* 🚀`;
   const BOT_API_KEY = getFromEnv("BOT_API_KEY");
   const baseUrl = `https://api.telegram.org/bot${BOT_API_KEY}/sendMessage?chat_id=${chatId}&text=${confirmationMessage}&parse_mode=markdown`;
   await axios.post(baseUrl);
